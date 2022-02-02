@@ -23,11 +23,12 @@ from __future__ import annotations
 import collections.abc
 import itertools
 import json
+import base64
+import typing
 
 import requests
-import typing
+import numcodecs
 import xarray as xr
-
 import cfgrib
 import eccodes
 import numpy as np
@@ -96,9 +97,11 @@ Index = typing.TypedDict(
 )
 
 
-def write(ds: xr.DataArray, indices: list[Index]) -> dict:
+def write(ds: xr.DataArray, indices: list[Index], store=None) -> dict:
     ds = prepare_write(ds)
-    store: dict[str, bytes] = {}
+    if store is None:
+        store: dict[str, bytes] = {}
+
     _ = ds.to_zarr(store, compute=False)
     keys_to_index = {IndexKey.from_index(v): v for v in indices}
 
@@ -211,10 +214,11 @@ def dataarray_from_index(grib_url: str, idxs: Index) -> np.ndarray:
         end_bytes = start_bytes + idx["_length"] - 1
         headers = dict(Range=f"bytes={start_bytes}-{end_bytes}")
 
-        # TODO: sans-io
+        # move http to fsspec ref
         print("GET", grib_url, headers)
         r = requests.get(grib_url, headers=headers)
         r.raise_for_status()
+        # move this to a filter
         data = r.content
         h = eccodes.codes_new_from_message(data)
         messages.append(cfgrib.messages.Message(h))
@@ -224,9 +228,33 @@ def dataarray_from_index(grib_url: str, idxs: Index) -> np.ndarray:
     return ds
 
 
+class COGRIBFilter(numcodecs.abc.Codec):
+    codec_id = "cogrib"
+
+    def encode(self, buf):
+        raise ValueError
+        
+    def decode(self, buf, out=None):
+        h = eccodes.codes_new_from_message(buf)
+        messages = [cfgrib.messages.Message(h)]
+        ds = xr.open_dataset(messages, engine="cfgrib")
+
+        result = ds[list(ds.data_vars)[0]].data
+
+        if out is not None:
+            out[:] = result
+            result = out
+
+        return result
+
+
+numcodecs.register_codec(COGRIBFilter)
+
+
 def prepare_write(ds) -> xr.DataArray:
     ds = ds.copy()
     chunks = {}
+    filters = [COGRIBFilter()]
     for k, v in ds.data_vars.items():
         for dim in v.dims[:-2]:
             chunks[dim] = 1
@@ -234,6 +262,7 @@ def prepare_write(ds) -> xr.DataArray:
 
     for k, v in ds.data_vars.items():
         ds[k].encoding["compressor"] = None
+        ds[k].encoding["filters"] = filters
     return ds
 
 
@@ -266,43 +295,24 @@ class COGRIBStore(collections.abc.Mapping):
     def __len__(self):
         return len(self.store)
 
-    # @property
-    # def _group(self):
-    #     return zarr.open(self.store)
 
-    # @property
-    # def _data_variables(self):
-    #     return [k for k, v in self._group.items() if v.initialized == 0]
-
-    # @property
-    # def _extra_dim(self):
-    #     k = self._data_variables[0]
-    #     # TODO: generalize this.
-    #     return self._group[k].ndim - 2
-
-    # @property
-    # def _extra_keys(self):
-    #     """These are additional keys that aren't present in the Zarr store."""
-    #     if self._extra_dim == 0:
-    #         keys = set(
-    #             f"{key}/{i}.0"
-    #             for i in range(len(self.indices))
-    #             for key in self._data_variables
-    #         )
-    #     else:
-    #         keys = set()
-    #         # this is wrong for multiple variables
-    #         for key in self._data_variables:
-    #             keys |= {f"{key}/{i}.0.0" for i in range(len(self.indices))}
-    #     return keys
-
-
-# What's missing: a mapping to / from variable/number to index positions
-
-
-"""
-Our mapping gets {variable}/{index-0}.{index-1}...0.0. So we need to know
-how to go from that key to a specific grib index.
-
-I think the best way is:
-"""
+def translate(store, grib_url):
+    refs = {}
+    for k, v in store.items():
+        k2 = k.split("/")[-1]
+        if k2 in {".zmetadata", ".zarray", ".zattrs", ".zgroup"}:
+            refs[k] = v.decode()
+        elif v.startswith(b"{"):
+            index = json.loads(v)
+            refs[k] = ["{{a}}", index["_offset"], index["_length"]]
+        else:
+            refs[k] = (b"base64:" + base64.b64encode(v)).decode()
+            
+    out = {
+        "version": 1,
+        "templates": {
+            "a": grib_url,
+        },
+        "refs": refs,
+    }
+    return out
