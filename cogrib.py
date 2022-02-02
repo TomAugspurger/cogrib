@@ -212,6 +212,7 @@ def dataarray_from_index(grib_url: str, idxs: Index) -> np.ndarray:
         headers = dict(Range=f"bytes={start_bytes}-{end_bytes}")
 
         # TODO: sans-io
+        print("GET", grib_url, headers)
         r = requests.get(grib_url, headers=headers)
         r.raise_for_status()
         data = r.content

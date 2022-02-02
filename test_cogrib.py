@@ -1,4 +1,3 @@
-from enum import auto
 import docker
 import pathlib
 import pytest
@@ -11,7 +10,6 @@ HERE = pathlib.Path(__file__).parent
 INDEX_FILE = HERE / "../data/20220126000000-0h-enfo-ef.index"
 GRIB2_FILE = HERE / "../data/20220126000000-0h-enfo-ef.grib2"
 GRIB2_PATH = "20220126/00z/0p4-beta/enfo/20220126000000-0h-enfo-ef.grib2"
-# GRIB2_URL = f"https://devstoreaccount1.blob.core.windows.net/ecmwf/{GRIB2_PATH}"
 GRIB2_URL = f"http://127.0.0.1:10000/devstoreaccount1/ecmwf/{GRIB2_PATH}"
 
 URL = "http://127.0.0.1:10000"
