@@ -96,21 +96,8 @@ def write(ds: xr.DataArray, indices: list[Index], grib_url: str) -> dict:
     keys_to_index = {IndexKey.from_index(v): v for v in indices}
 
     for var_name, v in ds.data_vars.items():
-        dims = v.dims[:-2]  # TODO: generalize common dims
-        ks = [[var_name]]
-
-        if "number" in dims:
-            ks.append(v.coords["number"].data)
-        else:
-            ks.append([None])
-
-        for dim in dims:
-            if dim in coordinate_name_to_index_key:
-                ks.append(v.coords[dim].data)
-        while len(ks) < len(IndexKey._fields):
-            ks.append([None])
-
-        variable_keys = list(itertools.product(*ks))
+        variable_keys = index_keys_for_variable(v)
+        dims = v.dims[:-2]
         # XXX: We assume the *order* of the dimensions matches the order in IndexKey
         # We know that can't actually be true...
         grib_indices = [keys_to_index[k] for k in variable_keys]

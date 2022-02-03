@@ -6,6 +6,8 @@ import xarray as xr
 import azure.storage.blob
 import fsspec
 import cogrib
+import cfgrib
+
 
 HERE = pathlib.Path(__file__).parent
 INDEX_FILE = HERE / "../data/20220126000000-0h-enfo-ef.index"
@@ -58,55 +60,11 @@ def storage():
     yield sas
 
 
-@pytest.fixture(scope="module")
-def ds_cf_single() -> xr.Dataset:
-    return xr.open_dataset(
-        str(GRIB2_FILE),
-        engine="cfgrib",
-        backend_kwargs={
-            "filter_by_keys": {"dataType": "cf", "typeOfLevel": "depthBelowLandLayer"}
-        },
-    )
+datasets = cfgrib.open_datasets(str(GRIB2_FILE))
 
 
-@pytest.fixture(scope="module")
-def ds_pf_single() -> xr.Dataset:
-    return xr.open_dataset(
-        str(GRIB2_FILE),
-        engine="cfgrib",
-        backend_kwargs={
-            "filter_by_keys": {"dataType": "pf", "typeOfLevel": "depthBelowLandLayer"}
-        },
-    )
-
-
-@pytest.fixture(scope="module")
-def ds_cf_multi() -> xr.Dataset:
-    ds = xr.open_dataset(
-        str(GRIB2_FILE),
-        engine="cfgrib",
-        backend_kwargs={
-            "filter_by_keys": {"dataType": "cf", "typeOfLevel": "isobaricInhPa"}
-        },
-    )
-    return ds
-
-
-@pytest.fixture(scope="module")
-def ds_pf_multi() -> xr.Dataset:
-    ds = xr.open_dataset(
-        str(GRIB2_FILE),
-        engine="cfgrib",
-        backend_kwargs={
-            "filter_by_keys": {"dataType": "pf", "typeOfLevel": "isobaricInhPa"}
-        },
-    )
-    return ds
-
-
-def test_cf_single(ds_cf_single):
-    ds = ds_cf_single
-
+@pytest.mark.parametrize("ds", datasets)
+def test_all(ds):
     sub_indices = cogrib.indices_for_dataset(ds, indices)
     store = cogrib.write(ds, sub_indices, GRIB2_URL)
     m = fsspec.filesystem("reference", fo=store).get_mapper("")
@@ -114,31 +72,88 @@ def test_cf_single(ds_cf_single):
     xr.testing.assert_equal(result, ds)
 
 
-def test_pf_single(ds_pf_single):
-    ds = ds_pf_single
 
-    sub_indices = cogrib.indices_for_dataset(ds, indices)
-    store = cogrib.write(ds, sub_indices, GRIB2_URL)
-    m = fsspec.filesystem("reference", fo=store).get_mapper("")
-    result = xr.open_zarr(m).compute()
-    xr.testing.assert_equal(result, ds)
-
-
-def test_cf_multi(ds_cf_multi):
-    ds = ds_cf_multi
-
-    sub_indices = cogrib.indices_for_dataset(ds, indices)
-    store = cogrib.write(ds, sub_indices, GRIB2_URL)
-    m = fsspec.filesystem("reference", fo=store).get_mapper("")
-    result = xr.open_zarr(m).compute()
-    xr.testing.assert_equal(result, ds)
+# @pytest.fixture(scope="module")
+# def ds_cf_single() -> xr.Dataset:
+#     return xr.open_dataset(
+#         str(GRIB2_FILE),
+#         engine="cfgrib",
+#         backend_kwargs={
+#             "filter_by_keys": {"dataType": "cf", "typeOfLevel": "depthBelowLandLayer"}
+#         },
+#     )
 
 
-def test_pf_multi(ds_pf_multi):
-    ds = ds_pf_multi
+# @pytest.fixture(scope="module")
+# def ds_pf_single() -> xr.Dataset:
+#     return xr.open_dataset(
+#         str(GRIB2_FILE),
+#         engine="cfgrib",
+#         backend_kwargs={
+#             "filter_by_keys": {"dataType": "pf", "typeOfLevel": "depthBelowLandLayer"}
+#         },
+#     )
 
-    sub_indices = cogrib.indices_for_dataset(ds, indices)
-    store = cogrib.write(ds, sub_indices, GRIB2_URL)
-    m = fsspec.filesystem("reference", fo=store).get_mapper("")
-    result = xr.open_zarr(m).compute()
-    xr.testing.assert_equal(result, ds)
+
+# @pytest.fixture(scope="module")
+# def ds_cf_multi() -> xr.Dataset:
+#     ds = xr.open_dataset(
+#         str(GRIB2_FILE),
+#         engine="cfgrib",
+#         backend_kwargs={
+#             "filter_by_keys": {"dataType": "cf", "typeOfLevel": "isobaricInhPa"}
+#         },
+#     )
+#     return ds
+
+
+# @pytest.fixture(scope="module")
+# def ds_pf_multi() -> xr.Dataset:
+#     ds = xr.open_dataset(
+#         str(GRIB2_FILE),
+#         engine="cfgrib",
+#         backend_kwargs={
+#             "filter_by_keys": {"dataType": "pf", "typeOfLevel": "isobaricInhPa"}
+#         },
+#     )
+#     return ds
+
+
+# def test_cf_single(ds_cf_single):
+#     ds = ds_cf_single
+
+#     sub_indices = cogrib.indices_for_dataset(ds, indices)
+#     store = cogrib.write(ds, sub_indices, GRIB2_URL)
+#     m = fsspec.filesystem("reference", fo=store).get_mapper("")
+#     result = xr.open_zarr(m).compute()
+#     xr.testing.assert_equal(result, ds)
+
+
+# def test_pf_single(ds_pf_single):
+#     ds = ds_pf_single
+
+#     sub_indices = cogrib.indices_for_dataset(ds, indices)
+#     store = cogrib.write(ds, sub_indices, GRIB2_URL)
+#     m = fsspec.filesystem("reference", fo=store).get_mapper("")
+#     result = xr.open_zarr(m).compute()
+#     xr.testing.assert_equal(result, ds)
+
+
+# def test_cf_multi(ds_cf_multi):
+#     ds = ds_cf_multi
+
+#     sub_indices = cogrib.indices_for_dataset(ds, indices)
+#     store = cogrib.write(ds, sub_indices, GRIB2_URL)
+#     m = fsspec.filesystem("reference", fo=store).get_mapper("")
+#     result = xr.open_zarr(m).compute()
+#     xr.testing.assert_equal(result, ds)
+
+
+# def test_pf_multi(ds_pf_multi):
+#     ds = ds_pf_multi
+
+#     sub_indices = cogrib.indices_for_dataset(ds, indices)
+#     store = cogrib.write(ds, sub_indices, GRIB2_URL)
+#     m = fsspec.filesystem("reference", fo=store).get_mapper("")
+#     result = xr.open_zarr(m).compute()
+#     xr.testing.assert_equal(result, ds)
