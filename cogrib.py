@@ -97,11 +97,10 @@ Index = typing.TypedDict(
 )
 
 
-def write(ds: xr.DataArray, indices: list[Index], store=None) -> dict:
+def write(ds: xr.DataArray, indices: list[Index], grib_url: str) -> dict:
     ds = prepare_write(ds)
-    if store is None:
-        store: dict[str, bytes] = {}
 
+    store = {}
     _ = ds.to_zarr(store, compute=False)
     keys_to_index = {IndexKey.from_index(v): v for v in indices}
 
@@ -140,6 +139,7 @@ def write(ds: xr.DataArray, indices: list[Index], store=None) -> dict:
             zarr_key = f"{var_name}/{zidx}{sep}{base}"
             store[zarr_key] = json.dumps(grib_index).encode()
 
+    store = translate(store, grib_url)
     return store
 
 
@@ -296,7 +296,7 @@ class COGRIBStore(collections.abc.Mapping):
         return len(self.store)
 
 
-def translate(store, grib_url):
+def translate(store: dict, grib_url: str) -> dict: 
     refs = {}
     for k, v in store.items():
         k2 = k.split("/")[-1]

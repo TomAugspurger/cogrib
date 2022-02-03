@@ -4,6 +4,7 @@ import pytest
 import json
 import xarray as xr
 import azure.storage.blob
+import fsspec
 import cogrib
 
 HERE = pathlib.Path(__file__).parent
@@ -104,9 +105,9 @@ def test_cf_single(ds_cf_single):
     ds = ds_cf_single
 
     sub_indices = cogrib.indices_for_dataset(ds, indices)
-    store = cogrib.write(ds, sub_indices)
-    costore = cogrib.COGRIBStore(store, GRIB2_URL)
-    result = xr.open_zarr(costore).compute()
+    store = cogrib.write(ds, sub_indices, GRIB2_URL)
+    m = fsspec.filesystem("reference", fo=store).get_mapper("")
+    result = xr.open_zarr(m).compute()
     xr.testing.assert_equal(result, ds)
 
 
@@ -114,10 +115,11 @@ def test_pf_single(ds_pf_single):
     ds = ds_pf_single
 
     sub_indices = cogrib.indices_for_dataset(ds, indices)
-    store = cogrib.write(ds, sub_indices)
-    costore = cogrib.COGRIBStore(store, GRIB2_URL)
-    result = xr.open_zarr(costore).compute()
+    store = cogrib.write(ds, sub_indices, GRIB2_URL)
+    m = fsspec.filesystem("reference", fo=store).get_mapper("")
+    result = xr.open_zarr(m).compute()
     xr.testing.assert_equal(result, ds)
+
 
 
 
@@ -125,17 +127,20 @@ def test_cf_multi(ds_cf_multi):
     ds = ds_cf_multi
 
     sub_indices = cogrib.indices_for_dataset(ds, indices)
-    store = cogrib.write(ds, sub_indices)
-    costore = cogrib.COGRIBStore(store, GRIB2_URL)
-    result = xr.open_zarr(costore).compute()
+    store = cogrib.write(ds, sub_indices, GRIB2_URL)
+    m = fsspec.filesystem("reference", fo=store).get_mapper("")
+    result = xr.open_zarr(m).compute()
     xr.testing.assert_equal(result, ds)
+
 
 
 def test_pf_multi(ds_pf_multi):
     ds = ds_pf_multi
 
     sub_indices = cogrib.indices_for_dataset(ds, indices)
-    store = cogrib.write(ds, sub_indices)
-    costore = cogrib.COGRIBStore(store, GRIB2_URL)
-    result = xr.open_zarr(costore).compute()
+    store = cogrib.write(ds, sub_indices, GRIB2_URL)
+    m = fsspec.filesystem("reference", fo=store).get_mapper("")
+    result = xr.open_zarr(m).compute()
     xr.testing.assert_equal(result, ds)
+
+
