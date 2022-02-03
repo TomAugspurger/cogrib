@@ -46,15 +46,6 @@ __version__ = "1.0.0"
 #    (isobaricInhPa) are the only "extra" dimensions.
 # 3. ...
 
-# Design questions:
-# 1. Where do we put the index information?
-#    - Option 1: In the zarr store, as an array value.
-#    - Option 2: In the zarr store, in `.zmetadata`.
-#    - Option 3: Outside of the Zarr store (separate JSON file, STAC, etc.)
-# 2. Who is responsible for translating the index metadata to an HTTP range request?
-#    - Option 1: A custom Mapping
-#    - Option 2: A custom Codec
-# ...
 
 coordinate_name_to_index_key = {
     "isobaricInhPa": "levelist",
@@ -148,59 +139,37 @@ def read(store, grib_url, indices):
     return xr.open_zarr(mystore)
 
 
-def index_key(x) -> IndexKey:
-    return IndexKey(x["param"], x.get("number"), x.get("levelist"))
+def index_variable_name(x: xr.DataArray) -> str:
+    return x.attrs["GRIB_shortName"]
 
 
-def index_variable_name(x):
-    # some variables have different names in the index vs. Dataset.
-    # TODO: see if cfgrib has a helper for this.
-    if x == "tciwv":
-        return "tcwv"
-    elif x == "u10":
-        return "10u"
-    elif x == "v10":
-        return "10v"
-    elif x == "t2m":
-        return "2t"
-    else:
-        return x
+def index_keys_for_variable(v: xr.DataArray) -> list[IndexKey]:
+    short_name = [v.attrs["GRIB_shortName"]]
+    number = levelist = [None]
+    if "number" in v.dims:
+        number = [int(i) for i in v.coords["number"].data.tolist()]
+    extra_dims = list(set(v.dims) - {"number", "latitude", "longitude"})
+    if extra_dims:
+        assert len(extra_dims) == 1
+        (dim,) = list(extra_dims)
+        levelist = [float(i) for i in v.coords[dim].data.tolist()]
+    return [IndexKey(*x) for x in itertools.product(short_name, number, levelist)]
 
 
 def indices_for_dataset(ds: xr.DataArray, indices: list[Index]) -> list[Index]:
-    d = {index_key(idx): idx for idx in indices}
-    keys = keys_from_dataset(ds)
+    d = {IndexKey.from_index(idx): idx for idx in indices}
+    keys = index_keys_for_dataset(ds)
     return [d[k] for k in keys]
 
 
-def keys_from_dataset(ds: xr.Dataset) -> list[IndexKey]:
+def index_keys_for_dataset(ds: xr.Dataset) -> list[IndexKey]:
     """
     Discover the index keys for a particular dataset.
     """
-    # this will need to be generalized much, much more.
-    if set(ds.dims) == {"latitude", "longitude"}:
-        return [IndexKey(index_variable_name(v), None, None) for v in ds.data_vars]
-    elif set(ds.dims) == {"number", "latitude", "longitude"}:
-        return [
-            IndexKey(index_variable_name(v), str(i), None)
-            for v in ds.data_vars
-            for i in ds.number.data.tolist()
-        ]
-    elif set(ds.dims) == {"isobaricInhPa", "number", "latitude", "longitude"}:
-        return [
-            IndexKey(index_variable_name(v), str(i), str(int(p)))
-            for v in ds.data_vars
-            for i in ds.number.data.tolist()
-            for p in ds.isobaricInhPa.data.tolist()
-        ]
-    elif set(ds.dims) == {"isobaricInhPa", "latitude", "longitude"}:
-        return [
-            IndexKey(index_variable_name(v), None, str(int(p)))
-            for v in ds.data_vars
-            for p in ds.isobaricInhPa.data.tolist()
-        ]
-    else:
-        raise ValueError
+    keys = []
+    for v in ds.data_vars.values():
+        keys.extend(index_keys_for_variable(v))
+    return keys
 
 
 def dataarray_from_index(grib_url: str, idxs: Index) -> np.ndarray:
@@ -233,7 +202,7 @@ class COGRIBFilter(numcodecs.abc.Codec):
 
     def encode(self, buf):
         raise ValueError
-        
+
     def decode(self, buf, out=None):
         h = eccodes.codes_new_from_message(buf)
         messages = [cfgrib.messages.Message(h)]
@@ -296,7 +265,10 @@ class COGRIBStore(collections.abc.Mapping):
         return len(self.store)
 
 
-def translate(store: dict, grib_url: str) -> dict: 
+def translate(store: dict, grib_url: str) -> dict:
+    """
+    Translate our representation to a Kerchunk index file.
+    """
     refs = {}
     for k, v in store.items():
         k2 = k.split("/")[-1]
@@ -307,7 +279,7 @@ def translate(store: dict, grib_url: str) -> dict:
             refs[k] = ["{{a}}", index["_offset"], index["_length"]]
         else:
             refs[k] = (b"base64:" + base64.b64encode(v)).decode()
-            
+
     out = {
         "version": 1,
         "templates": {

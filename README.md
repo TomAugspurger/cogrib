@@ -15,26 +15,22 @@ We *could* just convert the GRIB2 file to Zarr. But we'll assume that the data p
 
 ## How it works
 
-From the user's point of view, access to the data should feel a lot like using Zarr:
+There are two distinct stages: First a data host scans the GRIB2 file for datasets and figures out which portions the GRIB2 file each dataset refers to.
+These references, which are byte offsets and lengths for each variable, are saved off to a "kerchunk index file." The index file contains
+
+1. All the metadata (the dimensions, coordinate values, each variable's attributes, etc.)
+2. *References* to the GRIB2 as `(url, offset, length)` tuples.
+
+Second, a user loads up this kerchunk index file and loads it into xarray using the Zarr engine. Now, Zarr doesn't natively understand what to do with these
+references, so we need a slightly intelligent Zarr store that will perform the HTTP range requests for the actual data from the GRIB2 file. The fsspec "reference" filesystem
+does just that.
 
 ```python
->>> store = cogrib.COGRIBStore(..., grib_url="https://path/to/original/grib/file.grib2")
+>>> references = requests.get("http://path/to/references.json")
+>>> store = fsspec.filesystem("reference", fo=references).get_mapper("")
 >>> ds = xr.open_dataset(store, engine="zarr", chunks={})
 ```
 
-The `store` contains all the *metadata* for the file: things like the dimension names, coordinate labels, attributes, etc. Crucially, the data variables are not
-in `store`, since we don't want to host two copies of the data. Instead, we include "index lines", like the following:
-
-```json
-{"domain": "g", "date": "20220126", "time": "0000", "expver": "0001", "class": "od", "type": "pf", "stream": "enfo", "step": "306", "levtype": "sfc", "number": "18", "param": "10u", "_offset": 0, "_length": 609069}
-```
-
-These index lines, provided by the upstream data provider like the ECMWF, contain all the information necessary to fetch a chunk of data out of the original GRIB2 file
-from an HTTP server that supports range requests.
-
-When a user asks for some actual data, via something like `ds[variable].plot()`, the `cogrib.COGRIBStore` mapping makes the HTTP request for those bytes. From
-the point of view of xarray, it's identical to any other Zarr store.
-
 ## Why isn't this in kerchunk / fsspec's reference filesystem?
 
-It probably should be.
+It probably should be. Just experimenting for now.

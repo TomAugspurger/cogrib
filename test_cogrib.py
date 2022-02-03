@@ -31,7 +31,7 @@ def spawn_azurite():
         "azurite-blob --loose --blobHost 0.0.0.0",
         detach=True,
         ports={"10000": "10000"},
-        remove=True
+        remove=True,
     )
     yield azurite
     azurite.stop()
@@ -45,12 +45,16 @@ def storage():
     conn_str = f"DefaultEndpointsProtocol=http;AccountName={ACCOUNT_NAME};AccountKey={KEY};BlobEndpoint={URL}/{ACCOUNT_NAME};"
 
     bsc = azure.storage.blob.BlobServiceClient.from_connection_string(conn_str=conn_str)
-    bsc.create_container("ecmwf", public_access=azure.storage.blob.PublicAccess.Container)
+    bsc.create_container(
+        "ecmwf", public_access=azure.storage.blob.PublicAccess.Container
+    )
     container_client = bsc.get_container_client(container="ecmwf")
     with open(GRIB2_FILE, "rb") as f:
         container_client.upload_blob(GRIB2_PATH, f)
 
-    sas = azure.storage.blob.generate_container_sas(ACCOUNT_NAME, "ecmwf", account_key=KEY)
+    sas = azure.storage.blob.generate_container_sas(
+        ACCOUNT_NAME, "ecmwf", account_key=KEY
+    )
     yield sas
 
 
@@ -100,7 +104,6 @@ def ds_pf_multi() -> xr.Dataset:
     return ds
 
 
-
 def test_cf_single(ds_cf_single):
     ds = ds_cf_single
 
@@ -121,8 +124,6 @@ def test_pf_single(ds_pf_single):
     xr.testing.assert_equal(result, ds)
 
 
-
-
 def test_cf_multi(ds_cf_multi):
     ds = ds_cf_multi
 
@@ -133,7 +134,6 @@ def test_cf_multi(ds_cf_multi):
     xr.testing.assert_equal(result, ds)
 
 
-
 def test_pf_multi(ds_pf_multi):
     ds = ds_pf_multi
 
@@ -142,5 +142,3 @@ def test_pf_multi(ds_pf_multi):
     m = fsspec.filesystem("reference", fo=store).get_mapper("")
     result = xr.open_zarr(m).compute()
     xr.testing.assert_equal(result, ds)
-
-
