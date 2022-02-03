@@ -13,7 +13,7 @@ Examples
 
 >>> ds = xr.open_dataset(...)
 >>> indices = [json.loads(x) for x in requests.get(...).text if x]
->>> store = write(ds)
+>>> store = make_references(ds)
 >>> my_indices = indices_for_dataset(ds)
 >>> result = read(store, grib_url, my_indices)
 >>> xr.testing.assert_array_equal(ds, result)
@@ -88,7 +88,7 @@ Index = typing.TypedDict(
 )
 
 
-def write(ds: xr.DataArray, indices: list[Index], grib_url: str) -> dict:
+def make_references(ds: xr.DataArray, indices: list[Index], grib_url: str) -> dict:
     ds = prepare_write(ds)
 
     store = {}

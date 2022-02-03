@@ -21,9 +21,18 @@ These references, which are byte offsets and lengths for each variable, are save
 1. All the metadata (the dimensions, coordinate values, each variable's attributes, etc.)
 2. *References* to the GRIB2 as `(url, offset, length)` tuples.
 
-Second, a user loads up this kerchunk index file and loads it into xarray using the Zarr engine. Now, Zarr doesn't natively understand what to do with these
-references, so we need a slightly intelligent Zarr store that will perform the HTTP range requests for the actual data from the GRIB2 file. The fsspec "reference" filesystem
-does just that.
+In code, that looks like
+
+```python
+>>> datasets = cfgrib.open_datasets("/path/to/file.grib2")  # must be local
+>>> references = [cogrib.make_references(ds) for ds in datasets]
+```
+
+These references would be provided as, e.g., assets on a STAC item or collection.
+
+Second, a user loads up this kerchunk index file and loads it into xarray using the Zarr engine using the "normal" Kerchunk / fsspec reference access pattern. For those unfamiliar, with this process,
+Zarr doesn't natively understand what to do with these references files. So we need a slightly intelligent Zarr store that will perform the HTTP range requests
+for the actual data from the GRIB2 file. The fsspec "reference" filesystem does just that.
 
 ```python
 >>> references = requests.get("http://path/to/references.json")
