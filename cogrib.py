@@ -275,3 +275,16 @@ def translate(store: dict, grib_url: str) -> dict:
         "refs": refs,
     }
     return out
+
+
+def name_dataset(ds: xr.DataArray) -> str:
+    attrs = list(ds.data_vars.values())[0].attrs
+    params = ["dataType", "typeOfLevel"]
+    
+    values = ["{}={}".format(k, attrs[f"GRIB_{k}"]) for k in params]
+    k = attrs[f"GRIB_typeOfLevel"]
+    v = ds[k]
+
+    if v.size == 1:
+        values.append("{}={}".format(k, v.item()))
+    return "-".join(values)
