@@ -25,6 +25,7 @@ import itertools
 import json
 import base64
 import typing
+import logging
 
 import requests
 import numcodecs
@@ -35,7 +36,7 @@ import numpy as np
 
 __version__ = "1.0.0"
 
-
+logger = logging.getLogger(__name__)
 # All of this logic for moving between index values / positions, Zarr
 # keys, and xarray dimensions / coordinates is a mess. We're way
 # too focused on this specific dataset and will need to generalize substantially.
@@ -127,7 +128,11 @@ def read(store, grib_url, indices):
 
 
 def index_variable_name(x: xr.DataArray) -> str:
-    return x.attrs["GRIB_shortName"]
+    result = x.attrs["GRIB_shortName"]
+    if result == "tcwv":
+        # Why? stream=oper, type=fc
+        result = "tciwv"
+    return result
 
 
 def index_keys_for_variable(v: xr.DataArray) -> list[IndexKey]:
@@ -171,7 +176,7 @@ def dataarray_from_index(grib_url: str, idxs: Index) -> np.ndarray:
         headers = dict(Range=f"bytes={start_bytes}-{end_bytes}")
 
         # move http to fsspec ref
-        print("GET", grib_url, headers)
+        logger.info("GET %s - %s", grib_url, headers)
         r = requests.get(grib_url, headers=headers)
         r.raise_for_status()
         # move this to a filter
@@ -277,6 +282,9 @@ def translate(store: dict, grib_url: str) -> dict:
     return out
 
 
+def merge(*references, ):
+    ...
+
 def name_dataset(ds: xr.DataArray) -> str:
     attrs = list(ds.data_vars.values())[0].attrs
     params = ["dataType", "typeOfLevel"]
@@ -287,4 +295,4 @@ def name_dataset(ds: xr.DataArray) -> str:
 
     if v.size == 1:
         values.append("{}={}".format(k, v.item()))
-    return "-".join(values)
+    return "/".join(values)
