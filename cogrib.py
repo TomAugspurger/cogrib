@@ -64,21 +64,26 @@ class IndexKey(typing.NamedTuple):
     levelist: float | None
 
     @classmethod
-    def from_index(cls, index):
-        number = levelist = None
-        if "number" in index:
+    def from_index(
+        cls, index, include_step=False, include_number=False, include_levelist=False
+    ):
+        step = number = levelist = None
+        if include_number:
+            # if "number" in index:
             number = int(index["number"])
-        if "levelist" in index:
+        # if "levelist" in index:
+        if include_levelist:
             levelist = float(index["levelist"])
-        if "step" in index:
+        # if "step" in index:
+        if include_step:
             step = index["step"]  # might be a scalar or range
             if "-" in step and not step.startswith("-"):
                 # Can we have negative steps?
                 step = int(step.split("-")[1])
                 # TODO: this assumes hours. That's not generally true.
-                step = pd.Timedelta(hours=step)
             else:
-                step = None
+                step = int(step)
+            step = pd.Timedelta(hours=step)
         return cls(index["param"], number, step, levelist)
 
 
@@ -108,7 +113,18 @@ def make_references(ds: xr.DataArray, indices: list[Index], grib_url: str) -> di
 
     store = {}
     _ = ds.to_zarr(store, compute=False)
-    keys_to_index = {IndexKey.from_index(v): v for v in indices}
+    include_step = "step" in ds.dims
+    include_levelist = "levelist" in ds.dims
+    include_number = "number" in ds.dims
+    keys_to_index = {
+        IndexKey.from_index(
+            v,
+            include_number=include_number,
+            include_step=include_step,
+            include_levelist=include_levelist,
+        ): v
+        for v in indices
+    }
 
     for var_name, v in ds.data_vars.items():
         variable_keys = index_keys_for_variable(v)
