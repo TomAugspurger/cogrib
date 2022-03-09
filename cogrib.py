@@ -23,11 +23,13 @@ from __future__ import annotations
 import collections.abc
 import itertools
 import json
+import datetime
 import base64
 import typing
 import logging
 
 import requests
+import pandas as pd
 import numcodecs
 import xarray as xr
 import cfgrib
@@ -43,9 +45,12 @@ logger = logging.getLogger(__name__)
 # **Open problems**:
 # 1. We're assuming all data variables are >=2d, using longitude & latitude as
 #    the last two dimensions.
-# 2. We're assuming some combination of "number" (ensemble member) and "levelist"
-#    (isobaricInhPa) are the only "extra" dimensions.
+# 2. We're assuming some combination of "number" (ensemble member), `step` and
+# "levelist" (isobaricInhPa) are the only "extra" dimensions.
 # 3. ...
+# Notes on "step"
+# It just so happens that *one* of the files from the ECMWF uses `step` as
+# an important key.
 
 
 coordinate_name_to_index_key = {
@@ -56,6 +61,7 @@ coordinate_name_to_index_key = {
 class IndexKey(typing.NamedTuple):
     param: str
     number: int | None
+    step: datetime.timedelta | None
     levelist: float | None
 
     @classmethod
@@ -65,7 +71,14 @@ class IndexKey(typing.NamedTuple):
             number = int(index["number"])
         if "levelist" in index:
             levelist = float(index["levelist"])
-        return cls(index["param"], number, levelist)
+        if "step" in index:
+            step = index["step"]  # might be a scalar or range
+            if "-" in step and not step.startswith("-"):
+                # Can we have negative steps?
+                step = int(step.split("-")[1])
+                # TODO: this assumes hours. That's not generally true.
+                step = pd.Timedelta(hours=step)
+        return cls(index["param"], number, step, levelist)
 
 
 Index = typing.TypedDict(
@@ -137,15 +150,18 @@ def index_variable_name(x: xr.DataArray) -> str:
 
 def index_keys_for_variable(v: xr.DataArray) -> list[IndexKey]:
     short_name = [v.attrs["GRIB_shortName"]]
-    number = levelist = [None]
+    step = number = levelist = [None]
     if "number" in v.dims:
         number = [int(i) for i in v.coords["number"].data.tolist()]
-    extra_dims = list(set(v.dims) - {"number", "latitude", "longitude"})
+    if "step" in v.dims:
+        step = pd.to_timedelta(v.coords["step"]).tolist()
+
+    extra_dims = list(set(v.dims) - {"step", "number", "latitude", "longitude"})
     if extra_dims:
         assert len(extra_dims) == 1
         (dim,) = list(extra_dims)
         levelist = [float(i) for i in v.coords[dim].data.tolist()]
-    return [IndexKey(*x) for x in itertools.product(short_name, number, levelist)]
+    return [IndexKey(*x) for x in itertools.product(short_name, number, step, levelist)]
 
 
 def indices_for_dataset(ds: xr.DataArray, indices: list[Index]) -> list[Index]:
@@ -282,13 +298,16 @@ def translate(store: dict, grib_url: str) -> dict:
     return out
 
 
-def merge(*references, ):
+def merge(
+    *references,
+):
     ...
+
 
 def name_dataset(ds: xr.DataArray) -> str:
     attrs = list(ds.data_vars.values())[0].attrs
     params = ["dataType", "typeOfLevel"]
-    
+
     values = ["{}={}".format(k, attrs[f"GRIB_{k}"]) for k in params]
     k = attrs[f"GRIB_typeOfLevel"]
     v = ds[k]
