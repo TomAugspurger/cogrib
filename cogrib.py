@@ -68,8 +68,7 @@ class IndexKey(typing.NamedTuple):
         cls, index, include_step=False, include_number=False, include_levelist=False
     ):
         step = number = levelist = None
-        if include_number:
-            # if "number" in index:
+        if include_number and "number" in index:
             number = int(index["number"])
         if include_levelist and "levelist" in index:
             levelist = float(index["levelist"])
