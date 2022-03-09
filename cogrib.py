@@ -71,8 +71,7 @@ class IndexKey(typing.NamedTuple):
         if include_number:
             # if "number" in index:
             number = int(index["number"])
-        # if "levelist" in index:
-        if include_levelist:
+        if include_levelist and "levelist" in index:
             levelist = float(index["levelist"])
         # if "step" in index:
         if include_step:
@@ -113,15 +112,12 @@ def make_references(ds: xr.DataArray, indices: list[Index], grib_url: str) -> di
 
     store = {}
     _ = ds.to_zarr(store, compute=False)
-    include_step = "step" in ds.dims
-    include_levelist = "levelist" in ds.dims
-    include_number = "number" in ds.dims
     keys_to_index = {
         IndexKey.from_index(
             v,
-            include_number=include_number,
-            include_step=include_step,
-            include_levelist=include_levelist,
+            include_number="number" in ds.dims,
+            include_step="step" in ds.dims,
+            include_levelist="isobaricInhPa" in ds.dims,
         ): v
         for v in indices
     }
