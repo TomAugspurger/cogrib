@@ -50,7 +50,6 @@ logger = logging.getLogger(__name__)
 # 3. ...
 # Notes on "step"
 # It just so happens that *one* of the files from the ECMWF uses `step` as
-# an important key.
 
 
 coordinate_name_to_index_key = {
@@ -78,6 +77,8 @@ class IndexKey(typing.NamedTuple):
                 step = int(step.split("-")[1])
                 # TODO: this assumes hours. That's not generally true.
                 step = pd.Timedelta(hours=step)
+            else:
+                step = None
         return cls(index["param"], number, step, levelist)
 
 
